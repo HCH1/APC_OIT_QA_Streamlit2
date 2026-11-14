@@ -26,15 +26,23 @@ with tab1:
         st.info(f"Selected: {apc.name} · {apc.size:,} bytes")
         if st.button("Convert APC1 to OIT", type="primary", key="apc_convert"):
             tmp_out = None
+            progress = st.progress(0, text="Preparing APC1 conversion...")
+            status = st.empty()
+            def update_apc_progress(value, message):
+                progress.progress(min(100, max(0, int(value))), text=message)
+                status.caption(message)
             try:
+                update_apc_progress(5, "Reading uploaded APC1 workbook...")
                 suffix = Path(apc.name).suffix or ".xlsx"
                 m = __import__("re").search(r"PT\d+", apc.name, flags=__import__("re").I)
                 pt = m.group(0).upper() if m else "PT_UNKNOWN"
                 out_name = f"{datetime.now():%m%d}_OIT_result_{pt}.xlsx"
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as f:
                     tmp_out = Path(f.name)
-                count = convert_uploaded_file(apc.getvalue(), apc.name, tmp_out)
+                update_apc_progress(12, "Validating APC1 headers and preparing OIT template...")
+                count = convert_uploaded_file(apc.getvalue(), apc.name, tmp_out, progress_callback=update_apc_progress)
                 st.session_state["apc_result"] = (tmp_out.read_bytes(), out_name, count)
+                update_apc_progress(100, "Conversion completed.")
                 st.success(f"Conversion completed. Rows converted: {count}")
             except Exception as e:
                 st.error(f"APC1 → OIT conversion failed: {e}")
@@ -58,16 +66,23 @@ with tab2:
     if oit is not None and webdm is not None:
         st.caption(f"OIT1: {oit.name} · webDM2: {webdm.name}")
         if st.button("Run QA Comparison", type="primary", key="qa_run"):
+            progress = st.progress(0, text="Preparing QA comparison...")
+            status = st.empty()
+            def update_qa_progress(value, message):
+                progress.progress(min(100, max(0, int(value))), text=message)
+                status.caption(message)
             paths = []
             try:
+                update_qa_progress(3, "Preparing uploaded files...")
                 oit_path = temp_file(Path(oit.name).suffix or ".xlsx", oit.getvalue()); paths.append(oit_path)
                 webdm_path = temp_file(Path(webdm.name).suffix or ".psv", webdm.getvalue()); paths.append(webdm_path)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as f:
                     out_path = Path(f.name)
                 try:
-                    stats = write_result(oit_path, webdm_path, out_path)
+                    stats = write_result(oit_path, webdm_path, out_path, progress_callback=update_qa_progress)
                     out_name = f"{datetime.now():%m%d}_QApsv_result_{__import__('re').search(r'PT\d+', oit.name, flags=__import__('re').I).group(0).upper() if __import__('re').search(r'PT\d+', oit.name, flags=__import__('re').I) else 'PTxxxx'}.xlsx"
                     st.session_state["qa_result"] = (out_path.read_bytes(), out_name, stats)
+                    update_qa_progress(100, "QA comparison completed.")
                 finally:
                     out_path.unlink(missing_ok=True)
             except Exception as e:
