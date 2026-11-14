@@ -255,11 +255,14 @@ def read_webdm(path: Path) -> dict[str, dict[str, Any]]:
 # -----------------------------
 # Comparison and output
 # -----------------------------
-def compare_records(oit: dict, webdm: dict):
+def compare_records(oit: dict, webdm: dict, progress_callback=None):
     all_rows = []
     matched_keys = sorted(set(oit) & set(webdm))
 
-    for record_key in matched_keys:
+    total_matches = max(1, len(matched_keys))
+    for match_index, record_key in enumerate(matched_keys, start=1):
+        if progress_callback and (match_index == 1 or match_index % max(1, total_matches // 100) == 0 or match_index == total_matches):
+            progress_callback(min(75, 35 + int(match_index / total_matches * 40)), f"Comparing matched devices: {match_index:,} / {total_matches:,}")
         left = oit[record_key]
         right = webdm[record_key]
         checks = [
@@ -321,10 +324,18 @@ def make_output_path(oit_path: Path) -> Path:
     return Path(__file__).resolve().parent / f"{mmdd}_QApsv_result_{pt_number}.xlsx"
 
 
-def write_result(oit_path: Path, webdm_path: Path, output_path: Path) -> dict[str, int]:
+def write_result(oit_path: Path, webdm_path: Path, output_path: Path, progress_callback=None) -> dict[str, int]:
+    if progress_callback:
+        progress_callback(5, 'Reading OIT1 workbook...')
     oit = read_oit(oit_path)
+    if progress_callback:
+        progress_callback(20, 'Reading webDM2 Device Listing...')
     webdm = read_webdm(webdm_path)
-    matched, all_rows, differences, oit_only, webdm_only = compare_records(oit, webdm)
+    if progress_callback:
+        progress_callback(35, 'Starting comparison...')
+    matched, all_rows, differences, oit_only, webdm_only = compare_records(oit, webdm, progress_callback=progress_callback)
+    if progress_callback:
+        progress_callback(80, 'Building Excel QA report...')
 
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -417,6 +428,8 @@ def write_result(oit_path: Path, webdm_path: Path, output_path: Path) -> dict[st
     workbook.calculation.fullCalcOnLoad = True
     workbook.calculation.forceFullCalc = True
     workbook.calculation.calcMode = "auto"
+    if progress_callback:
+        progress_callback(95, 'Saving QA report workbook...')
     workbook.save(output_path)
 
     return {
