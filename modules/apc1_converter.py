@@ -120,7 +120,7 @@ def main():
 # Streamlit wrapper calls convert_uploaded_file() below.
 
 
-def convert_uploaded_file(uploaded_bytes: bytes, uploaded_name: str, output_path: Path) -> int:
+def convert_uploaded_file(uploaded_bytes: bytes, uploaded_name: str, output_path: Path, progress_callback=None) -> int:
     """Run v9 conversion logic from uploaded workbook bytes and save to output_path."""
     from io import BytesIO
     from openpyxl import load_workbook
@@ -148,7 +148,10 @@ def convert_uploaded_file(uploaded_bytes: bytes, uploaded_name: str, output_path
 
     outrow = 3
     converted = 0
+    total_rows = max(1, aws.max_row - 1)
     for sr in range(2, aws.max_row + 1):
+        if progress_callback and ((sr - 1) % max(1, total_rows // 100) == 0 or sr == aws.max_row):
+            progress_callback(min(85, 15 + int((sr - 1) / total_rows * 70)), f"Converting APC1 rows: {sr - 1:,} / {total_rows:,}")
         if all(aws.cell(sr, c).value in (None, "") for c in range(1, aws.max_column + 1)):
             continue
         vals = {
@@ -188,6 +191,8 @@ def convert_uploaded_file(uploaded_bytes: bytes, uploaded_name: str, output_path
 
     ows.freeze_panes = "A3"
     ows.auto_filter.ref = f"A2:{get_column_letter(ows.max_column)}{last}"
+    if progress_callback:
+        progress_callback(92, "Saving OIT workbook...")
     owb.save(output_path)
     awb.close()
     owb.close()
